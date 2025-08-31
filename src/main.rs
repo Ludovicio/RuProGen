@@ -1,58 +1,16 @@
-use minifb::{Key, Window, WindowOptions};
+use iced::{
+    mouse,
+    widget::{
+        button,
+        canvas::{self, Canvas, Event, Frame, Geometry, Path, Program, Image as CanvasImage},
+        column, container,
+    },
+    widget::image::Handle,
+    Color, Element, Length, Point, Rectangle,
+};
+
 use noise::{NoiseFn, Perlin};
-// use iced::{Element, Sandbox, Settings};
-
-// const WIDTH: usize = 10;
-// const HEIGHT: usize = 10;
-
-fn to_argb(val: u32) -> u32 {
-    let alpha = 0x00; // Transparente
-    let rgb = (val << 16) | (val << 8) | val; // R=G=B=val
-    (alpha << 24) | rgb
-}
-
-fn matrix2buffer_color( matrix: &Vec<Vec<u32>>, colors: &Vec<u32>, xscale: usize, yscale: usize ) -> Vec<u32> {
-    let width: usize = matrix[0].len();
-    let height: usize = matrix.len();
-    let window_width = width * xscale;
-    let window_height = height * yscale;
-
-    let mut buffer = vec![0; window_width * window_height];
-
-    for y in 0..height {
-        for x in 0..width {
-            let color = colors[matrix[y][x] as usize];
-            for dy in 0..yscale {
-                for dx in 0..xscale {
-                    let px = x * xscale + dx;
-                    let py = y * yscale + dy;
-                    buffer[py * window_width + px] = color;
-                }
-            }
-        }
-    }
-    buffer
-}
-
-fn matrix2buffer_simple( matrix: &Vec<Vec<u32>>) -> Vec<u32> {
-    let width: usize = matrix[0].len();
-    let height: usize = matrix.len();
-    let window_width = width;
-    let window_height = height;
-
-    let mut buffer = vec![0; window_width * window_height];
-
-    for y in 0..height {
-        for x in 0..width {
-            buffer[y * window_width + x] = to_argb(matrix[y][x]);
-        }
-    }
-    buffer
-}
-
-fn print_typeof<T>(_: &T) {
-    println!("{}", std::any::type_name::<T>());
-}
+use rand::Rng;
 
 fn fractal_noise(perlin: &Perlin, pos: [f64; 2], octaves: u32, lacunarity: f64, persistence: f64) -> f64 {
     let mut total = 0.0;
@@ -71,100 +29,153 @@ fn fractal_noise(perlin: &Perlin, pos: [f64; 2], octaves: u32, lacunarity: f64, 
     total / maxvalue // Normalizamos a -1.0..1.0 (más o menos)
 }
 
-fn main() {
+fn main() -> iced::Result {
+    iced::run("Canvas con imagen", PaintApp::update, PaintApp::view)
+}
 
-    let xscale : usize = 1;
-    let yscale : usize = 1;
+#[derive(Default)]
+struct PaintApp {
+    points: Vec<Point>,
+    image: Option<(u32, u32, Vec<u8>)>, // ancho, alto, pixels RGBA
+}
 
-    let width: usize = 1000;// matrix[0].len();
-    let height: usize = 1000;// matrix.len();
-    // let window_width = width * xscale;
-    // let window_height = height * yscale;
+#[derive(Debug, Clone)]
+enum Message {
+    Clicked(Point),
+    Clear,
+    ApplyTestImage,
+}
 
-    let perlin = Perlin::new(0);
-    
+// TODO: Sliders para parámetros.
 
-    // let matrix : Vec<Vec<u32>> = vec![
-    //     vec![0, 1, 2, 3, 0, 1, 2, 3, 0, 1],
-    //     vec![1, 2, 3, 0, 1, 2, 3, 0, 1, 2],
-    //     vec![2, 3, 0, 1, 2, 3, 0, 1, 2, 3],
-    //     vec![3, 0, 1, 2, 3, 0, 1, 2, 3, 0],
-    //     vec![0, 1, 2, 3, 0, 1, 2, 3, 0, 1],
-    //     vec![1, 2, 3, 0, 1, 2, 3, 0, 1, 2],
-    //     vec![2, 3, 0, 1, 2, 3, 0, 1, 2, 3],
-    //     vec![3, 0, 1, 2, 3, 0, 1, 2, 3, 0],
-    //     vec![0, 1, 2, 3, 0, 1, 2, 3, 0, 1],
-    //     vec![1, 2, 3, 0, 1, 2, 3, 0, 1, 2],
-    // ];
-    
-    // TODO solo se ve gris. Hay que ver la salida de  perlin.get
-    println!("perlin: {:>3}", perlin.get([0.0,0.0]));
-    println!("perlin: {:>3}", perlin.get([0.1,0.0]));
-    println!("perlin: {:>3}", perlin.get([0.0,0.1]));
-    println!("perlin: {:>3}", perlin.get([7.0,2.0]));
-    
-    // Generar la matriz
-    let matrix: Vec<Vec<u32>> = (0..height)
-        .map(|y| {
-            (0..width)
-                .map(|x| {
-                    // Coordenadas escaladas
-                    let nx = (x * xscale) as f64 / (width as f64);
-                    let ny = (y * yscale) as f64 / (height as f64);
+impl PaintApp {
+    fn update(&mut self, message: Message) {
+        match message {
+            Message::Clicked(pos) => self.points.push(pos),
+            Message::Clear => {
+              self.points.clear();
+              self.image = None;
+            },
+            Message::ApplyTestImage => {
+                // Creamos una imagen de prueba: 10x20 con patrón simple
+                let randnum = rand::thread_rng().gen_range(0..100);
+                let width = 300;
+                let height = 300;
+                let mut pixels = Vec::with_capacity((width * height * 4) as usize);
+                let perlin = Perlin::new(randnum);
 
-                    // Obtener valor Perlin en [-1.0, 1.0]
-                    // let value = perlin.get([nx, ny]);
+                for j in 0..(height) {
+                  for i in 0..(width) {
+                    let x = i as f64 / width as f64;
+                    let y = j as f64 / height as f64;
+                    let prev = fractal_noise(&perlin, [x, y], 8, 6.0, 0.9);
+                    let value: u8 = (prev * 255.999) as u8;
+                    pixels.extend_from_slice(&[value, value, value, 255]);
+                  }
+                }
 
-                    let value = fractal_noise(&perlin, [nx, ny], 8, 4.0, 0.8);
+                self.image = Some((width, height, pixels));
+            }
+        }
+    }
 
-                    // Escalar a rango 0-255 y convertir a u32
-                    let mapped = ((value + 1.0) * 0.5 * 255.0).round() as u32;
-                    mapped
-                })
-                .collect()
+    fn view(&self) -> Element<Message> {
+        let canvas = Canvas::new(DotsProgram {
+            points: self.points.clone(),
+            image: self.image.clone(),
         })
-        .collect();
+        .width(Length::Fill)
+        .height(Length::Fill);
 
-    let colors : Vec<u32> = vec![
-        0x00FFFFFF, // Blanco
-        0x00FF0000, // Rojo
-        0x0000FF00, // Verde
-        0x000000FF, // Azul
-    ];
+        let content = column![
+            button("Limpiar").on_press(Message::Clear),
+            button("Aplicar imagen de prueba").on_press(Message::ApplyTestImage),
+            canvas,
+        ]
+        .padding(12)
+        .spacing(12);
 
-    print_typeof(&colors);
-
-    // let scale = 50;
-    // let window_width = WIDTH * scale;
-    // let window_height = HEIGHT * scale;
-
-    // let mut buffer = vec![0; window_width * window_height];
-
-    // for y in 0..HEIGHT {
-    //     for x in 0..WIDTH {
-    //         let color = colors[matrix[y][x] as usize];
-    //         for dy in 0..scale {
-    //             for dx in 0..scale {
-    //                 let px = x * scale + dx;
-    //                 let py = y * scale + dy;
-    //                 buffer[py * window_width + px] = color;
-    //             }
-    //         }
-    //     }
-    // }
-
-    // let buffer = matrix2buffer_color(&matrix, &colors, xscale, yscale);
-    let buffer = matrix2buffer_simple(&matrix);
-    
-
-    let mut window = Window::new("Matriz Colorida", width, height, WindowOptions::default())
-        .expect("No se pudo crear la ventana");
-
-    while window.is_open() && !window.is_key_down(Key::Escape) {
-        window.update_with_buffer(&buffer, width, height).unwrap();
+        container(content)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
     }
 }
 
-// TODO perlin furula.
-// Estamos configurando icde para meter controles y configurar el perlin al vuelo.
-// https://book.iced.rs/first-steps.html
+#[derive(Clone)]
+struct DotsProgram {
+    points: Vec<Point>,
+    image: Option<(u32, u32, Vec<u8>)>,
+}
+
+impl Program<Message> for DotsProgram {
+    type State = ();
+
+    fn update(
+        &self,
+        _state: &mut Self::State,
+        event: Event,
+        bounds: Rectangle,
+        cursor: mouse::Cursor,
+    ) -> (canvas::event::Status, Option<Message>) {
+        if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) = event {
+            if let Some(pos) = cursor.position_in(bounds) {
+                return (
+                    canvas::event::Status::Captured,
+                    Some(Message::Clicked(pos)),
+                );
+            }
+        }
+        (canvas::event::Status::Ignored, None)
+    }
+
+    fn draw(
+        &self,
+        _state: &Self::State,
+        renderer: &iced::Renderer,
+        _theme: &iced::Theme,
+        bounds: Rectangle,
+        _cursor: mouse::Cursor,
+    ) -> Vec<Geometry> {
+        let mut frame = Frame::new(renderer, bounds.size());
+
+        // Dibujar imagen si existe
+        if let Some((width, height, pixels)) = &self.image {
+            self.draw_image_from_rgba(&mut frame, *width, *height, pixels);
+        }
+
+        // Dibujar puntos clicados
+        for &p in &self.points {
+            let dot = Path::circle(p, 4.0);
+            frame.fill(&dot, Color::from_rgb(0.2, 0.4, 0.9));
+        }
+
+        vec![frame.into_geometry()]
+    }
+}
+
+impl DotsProgram {
+    fn draw_image_from_rgba(
+        &self,
+        frame: &mut Frame,
+        width: u32,
+        height: u32,
+        pixels: &[u8],
+    ) {
+        // Crear handle desde RGBA
+        let handle = Handle::from_rgba(width, height, pixels.to_vec());
+
+        // Crear CanvasImage
+        let canvas_img = CanvasImage::new(handle);
+
+        let bounds = Rectangle {
+            x: 0.0,
+            y: 0.0,
+            width: width as f32,
+            height: height as f32,
+        };
+
+        // Dibujar imagen
+        frame.draw_image(bounds, canvas_img);
+    }
+}
