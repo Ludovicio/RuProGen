@@ -12,10 +12,10 @@ use iced::{
 use noise::{NoiseFn, Perlin};
 use rand::Rng;
 
-fn fractal_noise(perlin: &Perlin, pos: [f64; 2], octaves: u32, lacunarity: f64, persistence: f64) -> f64 {
+fn fractal_noise(perlin: &Perlin, pos: [f64; 2], octaves: u32, lacunarity: f64, persistence: f64, mut frequency: f64, mut amplitude: f64) -> f64 {
     let mut total = 0.0;
-    let mut frequency = 1.0;
-    let mut amplitude = 1.0;
+    // let mut frequency = 1.0;
+    // let mut amplitude = 1.0;
     let mut maxvalue = 0.0;
 
     for _ in 0..octaves {
@@ -41,6 +41,8 @@ struct PaintApp {
     octaves: u32,
     lacunarity: u32,
     persistence: u32,
+    frequency: u32,
+    amplitude: u32,
     imgWidth: u32,
     imgHeight: u32,
 }
@@ -65,11 +67,11 @@ enum Message {
     OctavesChanged(u32),
     LacunarityChanged(u32),
     PersistenceChanged(u32),
+    dAmplitudeChanged(u32),
+    dFrequencyChanged(u32),
     ImgWidthChanged(u32),
     ImgHeightChanged(u32),
 }
-
-// TODO: Sliders para parámetros.
 
 impl PaintApp {
     fn update(&mut self, message: Message) {
@@ -80,21 +82,20 @@ impl PaintApp {
               self.image = None;
             },
             Message::ApplyTestImage => {
-                // Creamos una imagen de prueba: 10x20 con patrón simple
-                let randnum = rand::thread_rng().gen_range(0..100);
-                // let width = 300;
-                // let height = 300;
+                let randnum = rand::thread_rng().gen();
                 let mut pixels = Vec::with_capacity((self.imgWidth * self.imgHeight * 4) as usize);
                 let perlin = Perlin::new(randnum);
-                let dlacunarity: f64  = (self.lacunarity as f64) / 10.0;
+                let dlacunarity:  f64 = (self.lacunarity as f64) / 10.0;
                 let dpersistence: f64 = (self.persistence as f64) / 100.0;
+                let dAmplitude:   f64 = (self.amplitude as f64) / 100.0;
+                let dFrequency:   f64 = (self.frequency as f64) / 100.0;
 
                 for j in 0..(self.imgHeight) {
                   for i in 0..(self.imgWidth) {
                     let x = i as f64 / self.imgWidth as f64;
                     let y = j as f64 / self.imgHeight as f64;
                     // let prev = fractal_noise(&perlin, [x, y], 8, 6.0, 0.9);
-                    let prev = fractal_noise(&perlin, [x, y], self.octaves, dlacunarity, dpersistence);
+                    let prev = fractal_noise(&perlin, [x, y], self.octaves, dlacunarity, dpersistence, dFrequency, dAmplitude);
                     let value: u8 = (prev * 255.999) as u8;
                     pixels.extend_from_slice(&[value, value, value, 255]);
                   }
@@ -105,6 +106,8 @@ impl PaintApp {
             Message::OctavesChanged(val) => self.octaves = val,
             Message::LacunarityChanged(val) => self.lacunarity = val,
             Message::PersistenceChanged(val) => self.persistence = val,
+            Message::dAmplitudeChanged(val) => self.amplitude = val,
+            Message::dFrequencyChanged(val) => self.frequency = val,
             Message::ImgWidthChanged(val) => self.imgWidth = val,
             Message::ImgHeightChanged(val) => self.imgHeight = val,
         }
@@ -141,6 +144,22 @@ impl PaintApp {
         .width(250);
         let persistenceSliderText = text(format!("Persistencia: {}", (self.persistence as f64) / 100.0));
 
+        let dAmplitudeSlider = container(
+            slider(1..=1000, self.amplitude, Message::dAmplitudeChanged)
+                .default(50u32)
+                .shift_step(1u32),
+        )
+        .width(250);
+        let dAmplitudeSliderText = text(format!("Amplitud: {}", (self.amplitude as f64) / 100.0));
+
+        let dFrequencySlider = container(
+            slider(1..=1000, self.frequency, Message::dFrequencyChanged)
+                .default(50u32)
+                .shift_step(1u32),
+        )
+        .width(250);
+        let dFrequencySliderText = text(format!("Frecuencia: {}", (self.frequency as f64) / 100.0));
+
         let imgWidthSlider = container(
             slider(50..=2000, self.imgWidth, Message::ImgWidthChanged)
                 .default(800u32)
@@ -166,13 +185,18 @@ impl PaintApp {
             horizontal_rule(1),
             persistenceSliderText, persistenceSlider,
             horizontal_rule(1),
+            dAmplitudeSliderText, dAmplitudeSlider,
+            horizontal_rule(1),
+            dFrequencySliderText, dFrequencySlider,
+            horizontal_rule(1),
             imgWidthSliderText, imgWidthSlider,
             horizontal_rule(1),
             imgHeightSliderText, imgHeightSlider,
         ]
         .padding(12)
-        .spacing(12);
-        //.width(Length::Shrink);
+        .spacing(12)
+        //.width(Length::Fixed(150));
+        .width(Length::Shrink);
 
         let viewer = column![
             canvas,
@@ -247,7 +271,8 @@ impl Program<Message> for DotsProgram {
         vec![frame.into_geometry()]
     }
 }
-
+// TODO: Valores por defecto. Revisar máximo octavas.
+// TODO: Barras de desplazamiento para imagen.
 impl DotsProgram {
     fn draw_image_from_rgba(
         &self,
