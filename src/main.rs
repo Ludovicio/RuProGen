@@ -5,7 +5,7 @@ use iced::{
         canvas::{self, Canvas, Event, Frame, Geometry, Path, Program, Image as CanvasImage},
         row, column, slider, container, text, horizontal_rule,
     },
-    widget::image::Handle,
+    widget::image::Handle, widget::scrollable::Scrollbar, widget::scrollable::Direction,
     Color, Element, Length, Point, Rectangle,
 };
 
@@ -114,12 +114,19 @@ impl PaintApp {
     }
 
     fn view(&self) -> Element<Message> {
+        use iced::widget::scrollable;
         let canvas = Canvas::new(DotsProgram {
             points: self.points.clone(),
             image: self.image.clone(),
         })
-        .width(Length::Fill)
-        .height(Length::Fill);
+        .width(Length::Fixed(self.imgWidth as f32))
+        .height(Length::Fixed(self.imgHeight as f32));
+
+        let scrollable_canvas = scrollable(canvas)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .direction(Direction::Both { vertical: Scrollbar::new(), horizontal: Scrollbar::new() });
+            
         let octavesSlider = container(
             slider(1..=50, self.octaves, Message::OctavesChanged)
                 .default(8u32)
@@ -199,7 +206,7 @@ impl PaintApp {
         .width(Length::Shrink);
 
         let viewer = column![
-            canvas,
+            scrollable_canvas,
         ]
         .padding(12)
         .spacing(12);
