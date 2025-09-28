@@ -12,7 +12,8 @@ use iced::{
 use noise::{NoiseFn, Perlin};
 use rand::Rng;
 
-fn fractal_noise(perlin: &Perlin, pos: [f64; 2], octaves: u32, lacunarity: f64, persistence: f64, mut frequency: f64, mut amplitude: f64) -> f64 {
+fn fractal_noise(perlin: &Perlin, pos: [f64; 2], octaves: u32, lacunarity: f64, persistence: f64,
+                    mut frequency: f64, mut amplitude: f64) -> f64 {
     let mut total = 0.0;
     // let mut frequency = 1.0;
     // let mut amplitude = 1.0;
@@ -29,11 +30,15 @@ fn fractal_noise(perlin: &Perlin, pos: [f64; 2], octaves: u32, lacunarity: f64, 
     total / maxvalue // Normalizamos a -1.0..1.0 (más o menos)
 }
 
+fn perlin_to_color(value: f64) -> [u8; 4] {
+    let normalized = (((value + 1.0) / 2.0) * 255.999) as u8; // Normalizamos a 0..255
+    [normalized, normalized, normalized, 255] // RGBA
+}
+
 fn main() -> iced::Result {
     iced::run("Canvas con imagen", PaintApp::update, PaintApp::view)
 }
 
-#[derive(Default)]
 struct PaintApp {
     // TODO: hay que eliminar points de toda la app
     points: Vec<Point>,
@@ -47,17 +52,21 @@ struct PaintApp {
     imgHeight: u32,
 }
 
-
-// TODO: Implementar Default para PaintApp esto es solo un ejemplo
-// impl Default for struct PaintApp {
-//     fn default() -> Self {
-//         Config {
-//             width: 1920,
-//             height: 1080,
-//             fullscreen: false,
-//         }
-//     }
-// }
+impl Default for PaintApp {
+    fn default() -> Self {
+        PaintApp {
+            points: Vec::new(),
+            image: None,
+            octaves: 8,
+            lacunarity: 20,
+            persistence: 50,
+            frequency: 50,
+            amplitude: 50,
+            imgWidth: 800,
+            imgHeight: 600,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 enum Message {
@@ -94,10 +103,10 @@ impl PaintApp {
                   for i in 0..(self.imgWidth) {
                     let x = i as f64 / self.imgWidth as f64;
                     let y = j as f64 / self.imgHeight as f64;
-                    // let prev = fractal_noise(&perlin, [x, y], 8, 6.0, 0.9);
                     let prev = fractal_noise(&perlin, [x, y], self.octaves, dlacunarity, dpersistence, dFrequency, dAmplitude);
-                    let value: u8 = (prev * 255.999) as u8;
-                    pixels.extend_from_slice(&[value, value, value, 255]);
+                    pixels.extend_from_slice(&perlin_to_color(prev));
+                    //let value: u8 = (prev * 255.999) as u8;
+                    //pixels.extend_from_slice(&[value, value, value, 255]);
                   }
                 }
 
@@ -278,8 +287,7 @@ impl Program<Message> for DotsProgram {
         vec![frame.into_geometry()]
     }
 }
-// TODO: Valores por defecto. Revisar máximo octavas.
-// TODO: Barras de desplazamiento para imagen.
+// TODO: Revisar máximo octavas.
 impl DotsProgram {
     fn draw_image_from_rgba(
         &self,
