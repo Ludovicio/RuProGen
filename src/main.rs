@@ -39,28 +39,51 @@ fn main() -> iced::Result {
     iced::run("Canvas con imagen", PaintApp::update, PaintApp::view)
 }
 
+trait Scallable {
+    fn scale(&self) -> f64;
+}
+
+struct BoundedParam {
+    val: u32,
+    min: u32,
+    max: u32,
+    step: u32,
+}
+
+struct ScaledBoundedParam {
+    val: u32,
+    min: u32,
+    max: u32,
+    step: u32,
+    scale: f64,
+}
+
+impl Scallable for ScaledBoundedParam {
+    fn scale(&self) -> f64 { self.val as f64 / self.scale }
+}
+
 struct PaintApp {
     image: Option<(u32, u32, Vec<u8>)>, // ancho, alto, pixels RGBA
-    octaves: u32,
-    lacunarity: u32,
-    persistence: u32,
-    frequency: u32,
-    amplitude: u32,
-    img_width: u32,
-    img_height: u32,
+    octaves: BoundedParam,
+    lacunarity: ScaledBoundedParam,
+    persistence: ScaledBoundedParam,
+    frequency: ScaledBoundedParam,
+    amplitude: ScaledBoundedParam,
+    img_width: BoundedParam,
+    img_height: BoundedParam,
 }
 
 impl Default for PaintApp {
     fn default() -> Self {
         PaintApp {
             image: None,
-            octaves: 8,
-            lacunarity: 20,
-            persistence: 50,
-            frequency: 50,
-            amplitude: 50,
-            img_width: 800,
-            img_height: 600,
+            octaves: BoundedParam { val: 8, min: 1, max: 20, step: 1 },
+            lacunarity: ScaledBoundedParam { val: 20, min: 1, max: 40, step: 1, scale: 10.0 },
+            persistence: ScaledBoundedParam { val: 50, min: 1, max: 100, step: 1, scale: 100.0 },
+            frequency: ScaledBoundedParam { val: 50, min: 1, max: 10000, step: 1, scale: 100.0 },
+            amplitude: ScaledBoundedParam { val: 50, min: 1, max: 1000, step: 1, scale: 100.0 },
+            img_width: BoundedParam { val: 1000, min: 50, max: 2000, step: 100 },
+            img_height: BoundedParam { val: 600, min: 50, max: 2000, step: 100 },
         }
     }
 }
@@ -86,33 +109,37 @@ impl PaintApp {
             },
             Message::ApplyTestImage => {
                 let randnum = rand::thread_rng().gen();
-                let mut pixels = Vec::with_capacity((self.img_width * self.img_height * 4) as usize);
+                let mut pixels = Vec::with_capacity((self.img_width.val * self.img_height.val * 4) as usize);
                 let perlin = Perlin::new(randnum);
-                let dlacunarity:  f64 = (self.lacunarity as f64) / 10.0;
-                let dpersistence: f64 = (self.persistence as f64) / 100.0;
-                let d_amplitude:   f64 = (self.amplitude as f64) / 100.0;
-                let d_frequency:   f64 = (self.frequency as f64) / 100.0;
+                // let dlacunarity:  f64 = (self.lacunarity as f64) / 10.0;
+                // let dpersistence: f64 = (self.persistence as f64) / 100.0;
+                // let d_amplitude:   f64 = (self.amplitude as f64) / 100.0;
+                // let d_frequency:   f64 = (self.frequency as f64) / 100.0;
+                let dlacunarity:  f64 = self.lacunarity.scale();
+                let dpersistence: f64 = self.persistence.scale();
+                let d_amplitude:  f64 = self.amplitude.scale();
+                let d_frequency:  f64 = self.frequency.scale();
 
-                for j in 0..(self.img_height) {
-                  for i in 0..(self.img_width) {
-                    let x = i as f64 / self.img_width as f64;
-                    let y = j as f64 / self.img_height as f64;
-                    let prev = fractal_noise(&perlin, [x, y], self.octaves, dlacunarity, dpersistence, d_frequency, d_amplitude);
+                for j in 0..(self.img_height.val) {
+                  for i in 0..(self.img_width.val) {
+                    let x = i as f64 / self.img_width.val as f64;
+                    let y = j as f64 / self.img_height.val as f64;
+                    let prev = fractal_noise(&perlin, [x, y], self.octaves.val, dlacunarity, dpersistence, d_frequency, d_amplitude);
                     pixels.extend_from_slice(&perlin_to_color(prev));
                     //let value: u8 = (prev * 255.999) as u8;
                     //pixels.extend_from_slice(&[value, value, value, 255]);
                   }
                 }
 
-                self.image = Some((self.img_width, self.img_height, pixels));
+                self.image = Some((self.img_width.val, self.img_height.val, pixels));
             },
-            Message::OctavesChanged(val) => self.octaves = val,
-            Message::LacunarityChanged(val) => self.lacunarity = val,
-            Message::PersistenceChanged(val) => self.persistence = val,
-            Message::DAmplitudeChanged(val) => self.amplitude = val,
-            Message::DFrequencyChanged(val) => self.frequency = val,
-            Message::ImgWidthChanged(val) => self.img_width = val,
-            Message::ImgHeightChanged(val) => self.img_height = val,
+            Message::OctavesChanged(val) => self.octaves.val = val,
+            Message::LacunarityChanged(val) => self.lacunarity.val = val,
+            Message::PersistenceChanged(val) => self.persistence.val = val,
+            Message::DAmplitudeChanged(val) => self.amplitude.val = val,
+            Message::DFrequencyChanged(val) => self.frequency.val = val,
+            Message::ImgWidthChanged(val) => self.img_width.val = val,
+            Message::ImgHeightChanged(val) => self.img_height.val = val,
         }
     }
 
@@ -121,8 +148,8 @@ impl PaintApp {
         let canvas = Canvas::new(DotsProgram {
             image: self.image.clone(),
         })
-        .width(Length::Fixed(self.img_width as f32))
-        .height(Length::Fixed(self.img_height as f32));
+        .width(Length::Fixed(self.img_width.val as f32))
+        .height(Length::Fixed(self.img_height.val as f32));
 
         let scrollable_canvas = scrollable(canvas)
             .width(Length::Fill)
@@ -130,60 +157,60 @@ impl PaintApp {
             .direction(Direction::Both { vertical: Scrollbar::new(), horizontal: Scrollbar::new() });
             
         let octaves_slider = container(
-            slider(1..=20, self.octaves, Message::OctavesChanged)
-                .default(8u32)
-                .shift_step(1u32),
+            slider(self.octaves.min ..= self.octaves.max, self.octaves.val, Message::OctavesChanged)
+                // .default(8u32)
+                .shift_step(self.octaves.step),
         )
         .width(250);
-        let octaves_slider_text = text(format!("Octavas: {}", self.octaves));
+        let octaves_slider_text = text(format!("Octavas: {}", self.octaves.val));
 
         let lacunarity_slider = container(
-            slider(1..=40, self.lacunarity, Message::LacunarityChanged)
-                .default(8u32)
-                .shift_step(1u32),
+            slider(self.lacunarity.min ..= self.lacunarity.max, self.lacunarity.val, Message::LacunarityChanged)
+                // .default(8u32)
+                .shift_step(self.lacunarity.step),
         )
         .width(250);
-        let lacunarity_slider_text = text(format!("lacunaridad: {}", (self.lacunarity as f64) / 10.0));
+        let lacunarity_slider_text = text(format!("lacunaridad: {}", self.lacunarity.scale()));
 
         let persistence_slider = container(
-            slider(1..=100, self.persistence, Message::PersistenceChanged)
-                .default(8u32)
-                .shift_step(1u32),
+            slider(self.persistence.min ..= self.persistence.max, self.persistence.val, Message::PersistenceChanged)
+                // .default(8u32)
+                .shift_step(self.persistence.step),
         )
         .width(250);
-        let persistence_slider_text = text(format!("Persistencia: {}", (self.persistence as f64) / 100.0));
+        let persistence_slider_text = text(format!("Persistencia: {}", self.persistence.scale()));
 
         let d_amplitude_slider = container(
-            slider(1..=1000, self.amplitude, Message::DAmplitudeChanged)
-                .default(50u32)
-                .shift_step(1u32),
+            slider(self.amplitude.min ..= self.amplitude.max, self.amplitude.val, Message::DAmplitudeChanged)
+                // .default(50u32)
+                .shift_step(self.persistence.step),
         )
         .width(250);
-        let d_amplitude_slider_text = text(format!("Amplitud: {}", (self.amplitude as f64) / 100.0));
+        let d_amplitude_slider_text = text(format!("Amplitud: {}", self.amplitude.scale()));
 
         let d_frequency_slider = container(
-            slider(1..=10000, self.frequency, Message::DFrequencyChanged)
-                .default(50u32)
-                .shift_step(1u32),
+            slider(self.frequency.min ..= self.frequency.max, self.frequency.val, Message::DFrequencyChanged)
+                //.default(self.amplitude)
+                .shift_step(self.amplitude.step),
         )
         .width(250);
-        let d_frequency_slider_text = text(format!("Frecuencia: {}", (self.frequency as f64) / 100.0));
+        let d_frequency_slider_text = text(format!("Frecuencia: {}", self.frequency.scale()));
 
         let img_width_slider = container(
-            slider(50..=2000, self.img_width, Message::ImgWidthChanged)
-                .default(800u32)
-                .shift_step(100u32),
+            slider(self.img_width.min ..= self.img_width.max, self.img_width.val, Message::ImgWidthChanged)
+                // .default(800u32)
+                .shift_step(self.frequency.step),
         )
         .width(250);
-        let img_width_slider_text = text(format!("Ancho imagen: {}", self.img_width));
+        let img_width_slider_text = text(format!("Ancho imagen: {}", self.img_width.val));
 
         let img_height_slider = container(
-            slider(50..=2000, self.img_height, Message::ImgHeightChanged)
-                .default(600u32)
-                .shift_step(100u32),
+            slider(self.img_height.min ..= self.img_height.max, self.img_height.val, Message::ImgHeightChanged)
+                // .default(600u32)
+                .shift_step(self.img_height.step),
         )
         .width(250);
-        let img_height_slider_text = text(format!("Alto imagen: {}", self.img_height));
+        let img_height_slider_text = text(format!("Alto imagen: {}", self.img_height.val));
 
         let controls = column![
             button("Limpiar").on_press(Message::Clear),
@@ -289,4 +316,4 @@ impl DotsProgram {
 }
 
 // TODO revisar, entender y reescribit pintado.
-// Centralizar valores minimos y máximos de sliders y demás controles
+// TODO Algo que indique que está pensado.
