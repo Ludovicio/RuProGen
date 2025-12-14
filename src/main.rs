@@ -35,6 +35,27 @@ fn perlin_to_color(value: f64) -> [u8; 4] {
     [normalized, normalized, normalized, 255] // RGBA
 }
 
+fn applyPerlin(params: & PaintApp) -> Vec<u8> {
+    let randnum = rand::thread_rng().gen();
+    let mut pixels = Vec::with_capacity((params.img_width.val * params.img_height.val * 4) as usize);
+    let perlin = Perlin::new(randnum);
+    let dlacunarity:  f64 = params.lacunarity.scale();
+    let dpersistence: f64 = params.persistence.scale();
+    let d_amplitude:  f64 = params.amplitude.scale();
+    let d_frequency:  f64 = params.frequency.scale();
+
+    for j in 0..(params.img_height.val) {
+        for i in 0..(params.img_width.val) {
+            let x = i as f64 / params.img_width.val as f64;
+            let y = j as f64 / params.img_height.val as f64;
+            let prev = fractal_noise(&perlin, [x, y], params.octaves.val, dlacunarity, dpersistence, d_frequency, d_amplitude);
+            pixels.extend_from_slice(&perlin_to_color(prev));
+        }
+    }
+
+    pixels
+}
+
 fn main() -> iced::Result {
     iced::run("Canvas con imagen", PaintApp::update, PaintApp::view)
 }
@@ -111,25 +132,9 @@ impl PaintApp {
               self.image = None;
             },
             Message::ApplyTestImage => {
-                let randnum = rand::thread_rng().gen();
-                let mut pixels = Vec::with_capacity((self.img_width.val * self.img_height.val * 4) as usize);
-                let perlin = Perlin::new(randnum);
-                let dlacunarity:  f64 = self.lacunarity.scale();
-                let dpersistence: f64 = self.persistence.scale();
-                let d_amplitude:  f64 = self.amplitude.scale();
-                let d_frequency:  f64 = self.frequency.scale();
-
-                for j in 0..(self.img_height.val) {
-                    for i in 0..(self.img_width.val) {
-                        let x = i as f64 / self.img_width.val as f64;
-                        let y = j as f64 / self.img_height.val as f64;
-                        let prev = fractal_noise(&perlin, [x, y], self.octaves.val, dlacunarity, dpersistence, d_frequency, d_amplitude);
-                        pixels.extend_from_slice(&perlin_to_color(prev));
-                    }
-                }
-
+                let pixels = applyPerlin(self);
                 let handle = Handle::from_rgba(self.img_width.val, self.img_height.val, pixels);
-                self.image = Some((self.img_width.val, self.img_height.val, handle)); 
+                self.image = Some((self.img_width.val, self.img_height.val, handle));
             },
             Message::OctavesChanged(val) => self.octaves.val = val,
             Message::LacunarityChanged(val) => self.lacunarity.val = val,
@@ -305,5 +310,5 @@ impl PaintApp {
     }
 }
 
-// TODO revisar, entender y reescribit pintado.
+// TODO Separar PaintApp y parámetros de generación de ruido.
 // TODO Algo que indique que está pensado.
