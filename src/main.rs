@@ -43,6 +43,7 @@ trait Scallable {
     fn scale(&self) -> f64;
 }
 
+#[derive(Clone)]
 struct BoundedParam {
     val: u32,
     min: u32,
@@ -50,6 +51,7 @@ struct BoundedParam {
     step: u32,
 }
 
+#[derive(Clone)]
 struct ScaledBoundedParam {
     val: u32,
     min: u32,
@@ -62,8 +64,9 @@ impl Scallable for ScaledBoundedParam {
     fn scale(&self) -> f64 { self.val as f64 / self.scale }
 }
 
+#[derive(Clone)]
 struct PaintApp {
-    image: Option<(u32, u32, Vec<u8>)>, // ancho, alto, pixels RGBA
+    image: Option<(u32, u32, Handle)>, // ancho, alto, pixels RGBA
     octaves: BoundedParam,
     lacunarity: ScaledBoundedParam,
     persistence: ScaledBoundedParam,
@@ -111,27 +114,22 @@ impl PaintApp {
                 let randnum = rand::thread_rng().gen();
                 let mut pixels = Vec::with_capacity((self.img_width.val * self.img_height.val * 4) as usize);
                 let perlin = Perlin::new(randnum);
-                // let dlacunarity:  f64 = (self.lacunarity as f64) / 10.0;
-                // let dpersistence: f64 = (self.persistence as f64) / 100.0;
-                // let d_amplitude:   f64 = (self.amplitude as f64) / 100.0;
-                // let d_frequency:   f64 = (self.frequency as f64) / 100.0;
                 let dlacunarity:  f64 = self.lacunarity.scale();
                 let dpersistence: f64 = self.persistence.scale();
                 let d_amplitude:  f64 = self.amplitude.scale();
                 let d_frequency:  f64 = self.frequency.scale();
 
                 for j in 0..(self.img_height.val) {
-                  for i in 0..(self.img_width.val) {
-                    let x = i as f64 / self.img_width.val as f64;
-                    let y = j as f64 / self.img_height.val as f64;
-                    let prev = fractal_noise(&perlin, [x, y], self.octaves.val, dlacunarity, dpersistence, d_frequency, d_amplitude);
-                    pixels.extend_from_slice(&perlin_to_color(prev));
-                    //let value: u8 = (prev * 255.999) as u8;
-                    //pixels.extend_from_slice(&[value, value, value, 255]);
-                  }
+                    for i in 0..(self.img_width.val) {
+                        let x = i as f64 / self.img_width.val as f64;
+                        let y = j as f64 / self.img_height.val as f64;
+                        let prev = fractal_noise(&perlin, [x, y], self.octaves.val, dlacunarity, dpersistence, d_frequency, d_amplitude);
+                        pixels.extend_from_slice(&perlin_to_color(prev));
+                    }
                 }
 
-                self.image = Some((self.img_width.val, self.img_height.val, pixels));
+                let handle = Handle::from_rgba(self.img_width.val, self.img_height.val, pixels);
+                self.image = Some((self.img_width.val, self.img_height.val, handle)); 
             },
             Message::OctavesChanged(val) => self.octaves.val = val,
             Message::LacunarityChanged(val) => self.lacunarity.val = val,
@@ -145,9 +143,9 @@ impl PaintApp {
 
     fn view(&self) -> Element<Message> {
         use iced::widget::scrollable;
-        let canvas = Canvas::new(DotsProgram {
-            image: self.image.clone(),
-        })
+
+        let canvas = Canvas::new(self)
+
         .width(Length::Fixed(self.img_width.val as f32))
         .height(Length::Fixed(self.img_height.val as f32));
 
@@ -253,12 +251,7 @@ impl PaintApp {
     }
 }
 
-#[derive(Clone)]
-struct DotsProgram {
-    image: Option<(u32, u32, Vec<u8>)>,
-}
-
-impl Program<Message> for DotsProgram {
+impl Program<Message> for PaintApp {
     type State = ();
 
     fn update(
@@ -281,27 +274,24 @@ impl Program<Message> for DotsProgram {
     ) -> Vec<Geometry> {
         let mut frame = Frame::new(renderer, bounds.size());
         // Dibujar imagen si existe
-        if let Some((width, height, pixels)) = &self.image {
-            self.draw_image_from_rgba(&mut frame, *width, *height, pixels);
+        if let Some((width, height, handle)) = &self.image {
+            self.draw_image_from_rgba(&mut frame, *width, *height, handle);
         }
 
         vec![frame.into_geometry()]
     }
 }
 
-impl DotsProgram {
+impl PaintApp {
     fn draw_image_from_rgba(
         &self,
         frame: &mut Frame,
         width: u32,
         height: u32,
-        pixels: &[u8],
+        handle: &Handle,
     ) {
-        // Crear handle desde RGBA
-        let handle = Handle::from_rgba(width, height, pixels.to_vec());
-
         // Crear CanvasImage
-        let canvas_img = CanvasImage::new(handle);
+        let canvas_img = CanvasImage::new(handle.clone());
 
         let bounds = Rectangle {
             x: 0.0,
