@@ -1,9 +1,10 @@
 use iced::{
+    Theme,
     mouse,
     widget::{
         button,
-        canvas::{self, Canvas, Event, Frame, Geometry, Program, Image as CanvasImage},
-        row, column, slider, container, text, horizontal_rule,
+        canvas::{Canvas, Event, Frame, Geometry, Program, Image as CanvasImage},
+        row, column, slider, container, text, rule,
     },
     widget::image::Handle, widget::scrollable::Scrollbar, widget::scrollable::Direction,
     Element, Length, Rectangle,
@@ -35,7 +36,7 @@ fn perlin_to_color(value: f64) -> [u8; 4] {
     [normalized, normalized, normalized, 255] // RGBA
 }
 
-fn applyPerlin(params: & PaintApp) -> Vec<u8> {
+fn apply_perlin(params: & PaintApp) -> Vec<u8> {
     let randnum = rand::thread_rng().gen();
     let mut pixels = Vec::with_capacity((params.img_width.val * params.img_height.val * 4) as usize);
     let perlin = Perlin::new(randnum);
@@ -57,7 +58,11 @@ fn applyPerlin(params: & PaintApp) -> Vec<u8> {
 }
 
 fn main() -> iced::Result {
-    iced::run("Canvas con imagen", PaintApp::update, PaintApp::view)
+    // iced::run("Canvas con imagen", PaintApp::update, PaintApp::view)
+    iced::application(PaintApp::default, PaintApp::update, PaintApp::view)
+        .theme(Theme::CatppuccinMocha)
+        .title("Generador de Ruido Perlin")
+        .run()
 }
 
 trait Scallable {
@@ -132,7 +137,7 @@ impl PaintApp {
               self.image = None;
             },
             Message::ApplyTestImage => {
-                let pixels = applyPerlin(self);
+                let pixels = apply_perlin(self);
                 let handle = Handle::from_rgba(self.img_width.val, self.img_height.val, pixels);
                 self.image = Some((self.img_width.val, self.img_height.val, handle));
             },
@@ -219,17 +224,17 @@ impl PaintApp {
             button("Limpiar").on_press(Message::Clear),
             button("Aplicar imagen de prueba").on_press(Message::ApplyTestImage),
             octaves_slider_text, octaves_slider,
-            horizontal_rule(1),
+            rule::horizontal(1),
             lacunarity_slider_text, lacunarity_slider,
-            horizontal_rule(1),
+            rule::horizontal(1),
             persistence_slider_text, persistence_slider,
-            horizontal_rule(1),
+            rule::horizontal(1),
             d_amplitude_slider_text, d_amplitude_slider,
-            horizontal_rule(1),
+            rule::horizontal(1),
             d_frequency_slider_text, d_frequency_slider,
-            horizontal_rule(1),
+            rule::horizontal(1),
             img_width_slider_text, img_width_slider,
-            horizontal_rule(1),
+            rule::horizontal(1),
             img_height_slider_text, img_height_slider,
         ]
         .padding(12)
@@ -262,11 +267,11 @@ impl Program<Message> for PaintApp {
     fn update(
         &self,
         _state: &mut Self::State,
-        _event: Event,
+        _event: &Event,
         _bounds: Rectangle,
         _cursor: mouse::Cursor,
-    ) -> (canvas::event::Status, Option<Message>) {
-        (canvas::event::Status::Ignored, None)
+    ) -> Option<iced::widget::Action<Message>> {
+        None
     }
 
     fn draw(
@@ -312,3 +317,4 @@ impl PaintApp {
 
 // TODO Separar PaintApp y parámetros de generación de ruido.
 // TODO Algo que indique que está pensado.
+// TODO Adaptar al nuevo iced.
